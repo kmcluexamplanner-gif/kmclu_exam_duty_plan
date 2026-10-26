@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Semester Examination Duty Planner</title>
+<style>
+:root{--navy:#15345b;--blue:#245ea8;--pale:#eef4fb;--line:#d9e2ef;--ink:#1d2939;--muted:#667085;--green:#18794e}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:var(--ink);background:#f5f7fb}
+header{background:linear-gradient(120deg,#15345b,#2865a9);color:white;padding:28px 20px}
+.wrap{max-width:1120px;margin:auto}h1{margin:0 0 8px;font-size:clamp(24px,4vw,34px)}header p{margin:0;color:#e4edf9}
+main{max-width:1120px;margin:22px auto;padding:0 16px 36px}.notice{background:#fff8e6;border:1px solid #f0d58a;padding:12px 14px;border-radius:10px;margin-bottom:16px;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #14213d08}
+h2{font-size:18px;margin:0 0 8px;color:var(--navy)}.help{color:var(--muted);font-size:13px;margin:0 0 12px;line-height:1.45}
+label{display:block;font-weight:700;font-size:13px;margin:12px 0 6px}textarea,input,select{width:100%;font:inherit;border:1px solid #c7d2e2;border-radius:8px;padding:10px;background:#fff;color:var(--ink)}textarea{min-height:125px;resize:vertical}input:focus,textarea:focus{outline:2px solid #9cc4fa;border-color:var(--blue)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer;font-size:14px}.primary{background:var(--blue);color:white}.secondary{background:#e8eef7;color:var(--navy)}.outline{background:white;border:1px solid #b8c7da;color:var(--navy)}button:hover{filter:brightness(.97)}
+#status{font-size:14px;margin:10px 0;color:var(--green);font-weight:700}.tablebox{overflow:auto;background:white;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;min-width:650px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #e7edf5;font-size:13px}th{background:#eaf1fa;color:#173b68;position:sticky;top:0}tr:last-child td{border-bottom:0}.empty{padding:24px;color:var(--muted);text-align:center}
+footer{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.5}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.row{grid-template-columns:1fr}header{padding:22px 16px}}
+@media print{body{background:white}header{background:white;color:#111;padding:0 0 14px}header p{color:#333}main{margin:0;padding:0}.notice,.grid,.actions,#status,footer{display:none!important}.tablebox{border:0}th{position:static;background:#eee;color:#111}td,th{font-size:10pt}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>Semester Examination Duty Planner</h1><p>Automatically distribute invigilation duties fairly among teachers.</p></div></header>
+<main>
+<div class="notice"><strong>Before using:</strong> This tool runs locally in your browser. It does not upload names anywhere. Review the generated chart and adjust it for leave, subject conflicts, accessibility, and university rules before issuing the final duty order.</div>
+<div class="grid">
+<section class="panel">
+<h2>1. Teacher list</h2><p class="help">Enter one teacher name per line. You can paste a list from Excel.</p>
+<label for="teachers">Teacher names</label><textarea id="teachers" placeholder="Dr. Asha Sharma&#10;Dr. Ravi Kumar&#10;Ms. Neha Singh&#10;Mr. Imran Khan"></textarea>
+<div class="row"><div><label for="perRoom">Teachers per room</label><select id="perRoom"><option value="1">1 teacher</option><option value="2" selected>2 teachers</option><option value="3">3 teachers</option></select></div><div><label for="avoidRepeat">Avoid same-day repeats</label><select id="avoidRepeat"><option value="yes" selected>Yes, where possible</option><option value="no">No</option></select></div></div>
+</section>
+<section class="panel">
+<h2>2. Examination schedule</h2><p class="help">Enter one date/session per line. Add the session time after the date if needed.</p>
+<label for="sessions">Exam dates / sessions</label><textarea id="sessions">26-10-2026 — Morning
+26-10-2026 — Evening
+27-10-2026 — Morning
+27-10-2026 — Evening
+28-10-2026 — Morning
+28-10-2026 — Evening</textarea>
+<label for="rooms">Examination rooms / halls</label><textarea id="rooms">Room 101
+Room 102
+Room 103
+Room 104</textarea>
+<p class="help">Each session uses the rooms listed above. The planner assigns the selected number of teachers to each room.</p>
+</section>
+</div>
+<div class="actions">
+<button class="primary" id="generate">Generate duty chart</button>
+<button class="secondary" id="csv" disabled>Download CSV</button>
+<button class="secondary" id="print" disabled>Print / Save as PDF</button>
+<button class="outline" id="clear">Clear all</button>
+</div>
+<div id="status" role="status"></div>
+<div id="results" class="tablebox"><div class="empty">Your duty chart will appear here after you select Generate duty chart.</div></div>
+<footer>Fairness method: teachers are assigned in a shuffled, least-assigned-first order to balance total duties. Same-day repeats are avoided where possible. This is an assistance tool, not an official university allocation system.</footer>
+</main>
+<script>
+let currentRows=[];
+const $=id=>document.getElementById(id);
+function lines(id){return $(id).value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function generate(){
+ const teachers=[...new Set(lines('teachers'))], sessions=lines('sessions'), rooms=lines('rooms');
+ const perRoom=Number($('perRoom').value), avoid=$('avoidRepeat').value==='yes';
+ if(teachers.length<perRoom){$('status').textContent=`Please enter at least ${perRoom} teacher name(s).`;return}
+ if(!sessions.length||!rooms.length){$('status').textContent='Please enter at least one exam session and one room.';return}
+ const counts=Object.fromEntries(teachers.map(t=>[t,0])), byDay={}, rows=[];
+ // Schedule every room in every session, choosing least-used teachers first.
+ for(const session of sessions){
+   const day=(session.match(/\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}/)||[session.split(/[—-]/)[0].trim()])[0];
+   byDay[day]=byDay[day]||new Set();
+   for(const room of rooms){
+     let chosen=[];
+     for(let n=0;n<perRoom;n++){
+       let pool=teachers.filter(t=>!chosen.includes(t));
+       if(avoid){
+         const fresh=pool.filter(t=>!byDay[day].has(t));
+         if(fresh.length>=perRoom-n) pool=fresh;
+         else if(fresh.length) pool=fresh;
+       }
+       const min=Math.min(...pool.map(t=>counts[t]));
+       const least=shuffle(pool.filter(t=>counts[t]===min));
+       const pick=least[0];
+       if(!pick) break;
+       chosen.push(pick); counts[pick]++; byDay[day].add(pick);
+     }
+     chosen.forEach((teacher,i)=>rows.push({session,room,teacher,slot:i+1}));
+   }
+ }
+ currentRows=rows;
+ const grouped={}; rows.forEach(r=>{const k=r.session+'||'+r.room;(grouped[k]=grouped[k]||[]).push(r)});
+ let html='<table><thead><tr><th>Sl. No.</th><th>Exam date / session</th><th>Room / Hall</th><th>Invigilator</th><th>Position</th></tr></thead><tbody>';
+ rows.forEach((r,i)=>html+=`<tr><td>${i+1}</td><td>${esc(r.session)}</td><td>${esc(r.room)}</td><td>${esc(r.teacher)}</td><td>${r.slot===1?'Invigilator 1':`Invigilator ${r.slot}`}</td></tr>`);
+ html+='</tbody></table>';
+ $('results').innerHTML=html;
+ const total=rows.length, duties=Object.values(counts), min=Math.min(...duties),max=Math.max(...duties);
+ $('status').textContent=`Generated ${total} duty assignments across ${sessions.length} session(s) and ${rooms.length} room(s). Teacher workload ranges from ${min} to ${max} duty/duties.`;
+ $('csv').disabled=false;$('print').disabled=false;
+}
+function downloadCSV(){
+ if(!currentRows.length)return;
+ const rows=[['Sl. No.','Exam date / session','Room / Hall','Invigilator','Position'],...currentRows.map((r,i)=>[i+1,r.session,r.room,r.teacher,r.slot===1?'Invigilator 1':`Invigilator ${r.slot}`])];
+ const csv=rows.map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+ const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='KMCLU_Semester_Exam_Duty_Chart.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+$('generate').addEventListener('click',generate);
+$('csv').addEventListener('click',downloadCSV);
+$('print').addEventListener('click',()=>window.print());
+$('clear').addEventListener('click',()=>{if(confirm('Clear all names and schedule details?')){['teachers','sessions','rooms'].forEach(id=>$(id).value='');$('results').innerHTML='<div class="empty">Your duty chart will appear here after you select Generate duty chart.</div>';$('status').textContent='';currentRows=[];$('csv').disabled=true;$('print').disabled=true}});
+</script>
+</body>
+</html>
